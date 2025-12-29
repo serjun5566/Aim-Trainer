@@ -3,186 +3,108 @@ const ctx = canvas.getContext('2d');
 const scoreElement = document.getElementById('score');
 const timerElement = document.getElementById('timer');
 const startMenu = document.getElementById('startMenu');
+const lobbyMenu = document.getElementById('lobbyMenu');
 const sensRange = document.getElementById('sensRange');
 const sensValue = document.getElementById('sensValue');
 const leaderList = document.getElementById('leaderList');
 
-let score = 0;
-let timeLeft = 30;
-let targets = [];
-let gameActive = false;
-let sensitivity = 1.0;
-let crosshairX = 0, crosshairY = 0;
+let score = 0, timeLeft = 30, targets = [], gameActive = false;
+let sensitivity = 1.0, crosshairX = 0, crosshairY = 0;
 
-// 連線相關
-let peer = null;
-let conn = null;
-let isReady = false;
-let opponentReady = false;
+// 連線與狀態變數
+let peer = null, conn = null;
+let myReady = false, peerReady = false;
 let playersScores = {};
 
-// 產生隨機 5 位英數字
-function generateRandomId() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 移除容易混淆的字元如 I, O, 0, 1
-    let result = '';
-    for (let i = 0; i < 5; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
+// 1. 生成 5 位代碼
+function generateId() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let res = '';
+    for(let i=0; i<5; i++) res += chars[Math.floor(Math.random()*chars.length)];
+    return res;
 }
 
-// 初始化 Peer
+// 2. 初始化 Peer
 function reinitializePeer() {
     if (peer) peer.destroy();
+    const cid = document.getElementById('myCustomId').value.toUpperCase() || generateId();
+    document.getElementById('myCustomId').value = cid;
     
-    const customId = document.getElementById('myCustomId').value.toUpperCase();
-    peer = new Peer(customId);
-
+    peer = new Peer(cid);
     peer.on('open', (id) => {
         document.getElementById('currentIdDisplay').innerText = id;
+        document.getElementById('myLobbyId').innerText = id;
         playersScores[id] = 0;
         updateLeaderboard();
-        document.getElementById('connectionStatus').innerText = "狀態: 等待連線...";
     });
-
-    peer.on('connection', (connection) => {
-        setupConnection(connection);
-    });
-
-    peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') {
-            alert('此 ID 已被佔用，請換一個！');
-        } else {
-            console.error(err);
-        }
-    });
+    peer.on('connection', (c) => setupConnection(c));
+    peer.on('error', (err) => { if(err.type === 'unavailable-id') alert('ID 已被佔用！'); });
 }
 
-// 預設生成一個 ID 並初始化
-document.getElementById('myCustomId').value = generateRandomId();
+document.getElementById('myCustomId').value = generateId();
 reinitializePeer();
 
 function connectToPeer() {
-    const targetId = document.getElementById('peerIdInput').value.toUpperCase();
-    if (targetId) {
-        setupConnection(peer.connect(targetId));
-    }
+    const tid = document.getElementById('peerIdInput').value.toUpperCase();
+    if (tid) setupConnection(peer.connect(tid));
 }
 
-function setupConnection(connection) {
-    conn = connection;
+function setupConnection(c) {
+    conn = c;
+    startMenu.style.display = 'none';
+    lobbyMenu.style.display = 'block';
     document.getElementById('connectionStatus').innerText = "狀態: 已連線";
     document.getElementById('connectionStatus').style.color = "#00ff88";
+    document.getElementById('peerLobbyId').innerText = conn.peer;
 
     conn.on('data', (data) => {
-        if (data.type === 'ready') {
-            opponentReady = true;
-            checkStartCondition();
-        }
-        if (data.type === 'scoreUpdate') {
+        if (data.type === 'readyStatus') {
+            peerReady = data.status;
+            updateLobbyUI();
+            checkAllReady();
+        } else if (data.type === 'gameStart') {
+            realStartGame();
+        } else if (data.type === 'scoreUpdate') {
             playersScores[data.id] = data.score;
             updateLeaderboard();
-        }
-        if (data.type === 'startNow') {
-            realStartGame();
         }
     });
 }
 
-function updateLeaderboard() {
-    const sorted = Object.entries(playersScores)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
-    leaderList.innerHTML = sorted.map(([id, s]) => 
-        `<li>${id}: ${s}</li>`).join('');
+// 3. 準備機制
+function pressReady() {
+    myReady = !myReady;
+    document.getElementById('readyBtn').innerText = myReady ? "取消準備" : "準備遊戲";
+    updateLobbyUI();
+    if (conn) conn.send({ type: 'readyStatus', status: myReady });
+    checkAllReady();
 }
 
-// 畫布尺寸與準心對齊
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resize);
-resize();
-
-// 靈敏度調整
-sensRange.addEventListener('input', (e) => {
-    if (!gameActive) {
-        sensitivity = parseFloat(e.target.value);
-        sensValue.innerText = sensitivity.toFixed(1);
-    }
-});
-
-// 滑鼠鎖定與位移邏輯
-window.addEventListener('mousemove', (e) => {
-    if (gameActive && document.pointerLockElement === canvas) {
-        crosshairX += e.movementX * sensitivity;
-        crosshairY += e.movementY * sensitivity;
-        
-        crosshairX = Math.max(0, Math.min(canvas.width, crosshairX));
-        crosshairY = Math.max(0, Math.min(canvas.height, crosshairY));
-    }
-});
-
-// 監聽鎖定狀態（處理 Esc）
-document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement !== canvas && gameActive) {
-        console.log("偵測到 Esc，點擊畫面可恢復");
-    }
-});
-
-class Target {
-    constructor() {
-        this.radius = 25;
-        this.x = Math.random() * (canvas.width - 50) + 25;
-        this.y = Math.random() * (canvas.height - 50) + 25;
-        const speed = 4;
-        const angle = Math.random() * Math.PI * 2;
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
-        this.color = '#00d4ff';
-    }
-    update() {
-        this.x += this.vx; this.y += this.vy;
-        if (this.x + this.radius > canvas.width || this.x - this.radius < 0) this.vx *= -1;
-        if (this.y + this.radius > canvas.height || this.y - this.radius < 0) this.vy *= -1;
-    }
-    draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.closePath();
-    }
-}
-
-function pressStart() {
-    isReady = true;
-    document.getElementById('startBtn').innerText = "等待對手中...";
-    if (conn) conn.send({ type: 'ready' });
-    checkStartCondition();
-}
-
-function checkStartCondition() {
+function updateLobbyUI() {
+    const m = document.getElementById('myReadyStatus');
+    const p = document.getElementById('peerReadyStatus');
+    m.innerText = myReady ? "已準備" : "未準備";
+    m.style.background = myReady ? "#00ff88" : "#444";
     if (conn) {
-        if (isReady && opponentReady) {
-            conn.send({ type: 'startNow' });
-            realStartGame();
-        }
-    } else if (isReady) {
+        p.innerText = peerReady ? "已準備" : "未準備";
+        p.style.background = peerReady ? "#00ff88" : "#444";
+    }
+}
+
+function checkAllReady() {
+    if (myReady && (conn ? peerReady : true)) {
+        if (conn) conn.send({ type: 'gameStart' });
         realStartGame();
     }
 }
 
+// 4. 遊戲核心
 function realStartGame() {
     if (gameActive) return;
     canvas.requestPointerLock();
     score = 0; timeLeft = 30; targets = []; gameActive = true;
-    startMenu.style.display = 'none';
-    
-    // 初始化準心到中心
-    crosshairX = canvas.width / 2;
-    crosshairY = canvas.height / 2;
+    lobbyMenu.style.display = 'none';
+    crosshairX = canvas.width / 2; crosshairY = canvas.height / 2;
 
     const timerInterval = setInterval(() => {
         if (!gameActive) { clearInterval(timerInterval); return; }
@@ -193,28 +115,24 @@ function realStartGame() {
     animate();
 }
 
-// 統一的點擊偵測邏輯
-canvas.addEventListener('mousedown', () => {
-    if (!gameActive) return;
-    
-    // 如果按了 Esc 後點擊，先重新鎖定，不計分
-    if (document.pointerLockElement !== canvas) {
-        canvas.requestPointerLock();
-        return;
+class Target {
+    constructor() {
+        this.radius = 25;
+        this.x = Math.random() * (canvas.width - 50) + 25;
+        this.y = Math.random() * (canvas.height - 50) + 25;
+        this.vx = (Math.random() - 0.5) * 8;
+        this.vy = (Math.random() - 0.5) * 8;
     }
-
-    targets.forEach((t, i) => {
-        const dist = Math.sqrt((crosshairX - t.x)**2 + (crosshairY - t.y)**2);
-        if (dist < t.radius) {
-            targets.splice(i, 1);
-            score += 100;
-            scoreElement.innerText = score;
-            playersScores[peer.id] = score;
-            updateLeaderboard();
-            if (conn) conn.send({ type: 'scoreUpdate', id: peer.id, score: score });
-        }
-    });
-});
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        if (this.x + this.radius > canvas.width || this.x - this.radius < 0) this.vx *= -1;
+        if (this.y + this.radius > canvas.height || this.y - this.radius < 0) this.vy *= -1;
+    }
+    draw() {
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#00d4ff"; ctx.fill(); ctx.closePath();
+    }
+}
 
 function animate() {
     if (!gameActive) return;
@@ -222,10 +140,8 @@ function animate() {
     if (targets.length < 5) targets.push(new Target());
     targets.forEach(t => { t.update(); t.draw(); });
     
-    // 畫準心 (僅在鎖定時顯示，避免 Esc 後出現兩個準心)
     if (document.pointerLockElement === canvas) {
-        ctx.strokeStyle = "white"; ctx.lineWidth = 2;
-        ctx.beginPath();
+        ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.beginPath();
         ctx.moveTo(crosshairX-10, crosshairY); ctx.lineTo(crosshairX+10, crosshairY);
         ctx.moveTo(crosshairX, crosshairY-10); ctx.lineTo(crosshairX, crosshairY+10);
         ctx.stroke();
@@ -233,9 +149,49 @@ function animate() {
     requestAnimationFrame(animate);
 }
 
+// 5. 事件監聽 (Esc 修正)
+canvas.addEventListener('mousedown', () => {
+    if (!gameActive) return;
+    if (document.pointerLockElement !== canvas) {
+        canvas.requestPointerLock();
+        return;
+    }
+    targets.forEach((t, i) => {
+        const d = Math.sqrt((crosshairX - t.x)**2 + (crosshairY - t.y)**2);
+        if (d < t.radius) {
+            targets.splice(i, 1);
+            score += 100; scoreElement.innerText = score;
+            playersScores[peer.id] = score; updateLeaderboard();
+            if (conn) conn.send({ type: 'scoreUpdate', id: peer.id, score: score });
+        }
+    });
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (gameActive && document.pointerLockElement === canvas) {
+        crosshairX += e.movementX * sensitivity;
+        crosshairY += e.movementY * sensitivity;
+        crosshairX = Math.max(0, Math.min(canvas.width, crosshairX));
+        crosshairY = Math.max(0, Math.min(canvas.height, crosshairY));
+    }
+});
+
+sensRange.addEventListener('input', (e) => {
+    sensitivity = parseFloat(e.target.value);
+    sensValue.innerText = sensitivity.toFixed(1);
+});
+
+function updateLeaderboard() {
+    const sorted = Object.entries(playersScores).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    leaderList.innerHTML = sorted.map(([id, s]) => `<li>${id}: ${s}</li>`).join('');
+}
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize);
+resize();
+
 function endGame() {
-    gameActive = false;
-    document.exitPointerLock();
-    alert(`遊戲結束！分數: ${score}`);
-    location.reload(); 
+    gameActive = false; document.exitPointerLock();
+    alert(`遊戲結束！你的分數: ${score}`);
+    location.reload();
 }

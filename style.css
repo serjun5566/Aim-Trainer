@@ -1,87 +1,46 @@
 body {
-    margin: 0;
-    overflow: hidden;
+    margin: 0; overflow: hidden;
     background-color: #1a1a1a;
     font-family: 'Segoe UI', Arial, sans-serif;
-    color: white;
-    user-select: none;
+    color: white; user-select: none;
 }
 
-#gameCanvas {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1;
-    /* 當指標被鎖定時，瀏覽器會自動隱藏游標 */
-    /* 我們設定當滑鼠在畫布上時，系統游標變成 default 或 pointer，直到鎖定後消失 */
-    cursor: crosshair; 
-}
+#gameCanvas { display: block; cursor: crosshair; }
 
 .ui {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    z-index: 10;
-    pointer-events: none;
-    font-size: 20px;
+    position: absolute; top: 20px; left: 20px; z-index: 10;
+    font-size: 20px; pointer-events: none;
 }
 
 #leaderboard {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    z-index: 10;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #00ff88;
-    min-width: 180px;
+    position: absolute; top: 20px; right: 20px; z-index: 10;
+    background: rgba(0, 0, 0, 0.7); padding: 15px;
+    border-radius: 8px; border: 1px solid #00ff88; min-width: 150px;
 }
 
-#leaderList {
-    list-style: none;
-    padding: 0;
-    margin: 5px 0 0 0;
-    color: #00ff88;
-    font-family: monospace;
+.menu-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 20; background: rgba(0, 0, 0, 0.95);
+    padding: 30px; border-radius: 20px; border: 2px solid #00ff88;
+    text-align: center; min-width: 350px;
 }
 
-#startMenu {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 20;
-    background: rgba(0, 0, 0, 0.95);
-    padding: 40px;
-    border-radius: 20px;
-    border: 2px solid #00ff88;
-    text-align: center;
-    box-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+.lobby-players {
+    display: flex; justify-content: space-around; align-items: center; margin: 25px 0;
 }
 
-.menu-controls input[type="text"] {
-    padding: 8px;
-    border-radius: 4px;
-    border: none;
-    margin-right: 5px;
+.vs-tag { font-size: 24px; font-weight: bold; color: #ff4757; }
+
+.status-tag {
+    margin-top: 10px; padding: 5px 15px; border-radius: 5px;
+    background: #444; font-size: 14px; transition: 0.3s;
 }
 
 button {
-    padding: 10px 25px;
-    font-size: 18px;
-    cursor: pointer;
-    background: #00ff88;
-    border: none;
-    border-radius: 5px;
-    font-weight: bold;
-    transition: 0.3s;
+    padding: 10px 20px; cursor: pointer; background: #00ff88;
+    border: none; border-radius: 5px; font-weight: bold;
 }
 
-button:hover {
-    background: #00cc6e;
-    transform: scale(1.05);
+input[type="text"] {
+    padding: 8px; border-radius: 4px; border: none; margin: 5px;
 }
-
-hr { border: 0; border-top: 1px solid #444; }

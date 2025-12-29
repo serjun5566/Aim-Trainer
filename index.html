@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Aim Trainer Multiplayer</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div class="ui">
+        <div>分數: <span id="score">0</span></div>
+        <div>剩餘時間: <span id="timer">30</span>s</div>
+        <div id="connectionStatus" style="color: #ff4757;">狀態: 未連線</div>
+    </div>
+
+    <div id="leaderboard">
+        <h3>排行榜 (TOP 5)</h3>
+        <ul id="leaderList"></ul>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="startMenu">
+        <h1>Aim Trainer</h1>
+        <div class="menu-controls">
+            <div style="margin-bottom: 10px;">
+                <label>你的房間 ID (5位數): </label>
+                <input type="text" id="myCustomId" maxlength="5" style="width: 80px; text-align: center; border-radius: 4px; border:none; padding: 5px;">
+                <button onclick="reinitializePeer()" style="padding: 5px 10px; font-size: 14px;">更換 ID</button>
+            </div>
+            <p>目前 ID: <strong id="currentIdDisplay" style="color: #00ff88;">取得中...</strong></p>
+            
+            <div style="margin-bottom: 20px;">
+                <input type="text" id="peerIdInput" placeholder="輸入好友的 ID">
+                <button onclick="connectToPeer()">進入房間</button>
+            </div>
+            
+            <hr style="margin: 15px 0; opacity: 0.3;">
+            <label>靈敏度 (Sensitivity): </label>
+            <input type="range" id="sensRange" min="0.1" max="5" step="0.1" value="1">
+            <span id="sensValue">1.0</span>
+        </div>
+        <button id="startBtn" onclick="pressStart()">準備開始</button>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

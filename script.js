@@ -11,7 +11,7 @@ let score = 0, timeLeft = 30, gameActive = false;
 let sensitivity = 0.002, yaw = 0, pitch = 0;
 let peer = null, connections = {}, playersState = {};
 
-// --- 3D 場景初始化 ---
+// --- 3D 初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0a);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -66,7 +66,7 @@ window.addEventListener('mousedown', () => {
     }
 });
 
-// --- 連線邏輯優化 ---
+// --- 自動進入房間邏輯 ---
 function generateRandomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let res = '';
@@ -74,41 +74,54 @@ function generateRandomCode() {
     return res;
 }
 
-function initRoomCode() {
-    const roomInput = document.getElementById('roomCodeInput');
-    if (roomInput && !roomInput.value) roomInput.value = generateRandomCode();
-}
-window.addEventListener('load', initRoomCode);
+window.addEventListener('load', () => {
+    document.getElementById('roomCodeInput').value = generateRandomCode();
+});
 
-function joinRoom(role) {
+function handleEntry() {
     const name = document.getElementById('playerNameInput').value.trim();
     const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
-    if (!name || !code) return alert("請輸入名稱與代碼");
-
     const statusDisplay = document.getElementById('connStatus');
-    statusDisplay.innerText = "狀態: 同步中...";
-    
+
+    if (!name || !code) return alert("請輸入名稱與房間代碼！");
+
+    statusDisplay.innerText = "狀態: 正在建立/尋找房間...";
     if (peer) peer.destroy();
-    peer = new Peer(role === 'host' ? code : null, { debug: 1 });
+
+    // 嘗試成為房主
+    peer = new Peer(code, { debug: 1 });
 
     peer.on('open', (id) => {
-        playersState[id] = { name: name, ready: false, score: 0 };
-        document.getElementById('displayRoomCode').innerText = code;
-        if (role === 'host') {
-            enterLobby();
-            statusDisplay.innerText = "狀態: 房間已建立";
-        } else {
-            statusDisplay.innerText = "狀態: 正在連線房主...";
-            const conn = peer.connect(code);
-            setupConnection(conn);
-        }
+        setupLocalPlayer(name, id, code);
+        enterLobby();
+        statusDisplay.innerText = "狀態: 房間已建立 (Host)";
     });
 
     peer.on('connection', setupConnection);
+
     peer.on('error', (err) => {
-        alert("連線失敗: " + err.type);
-        statusDisplay.innerText = "狀態: 錯誤";
+        if (err.type === 'unavailable-id') {
+            // ID 已被佔用，改為加入者
+            switchToClient(name, code);
+        } else {
+            alert("連線失敗: " + err.type);
+        }
     });
+}
+
+function switchToClient(name, code) {
+    if (peer) peer.destroy();
+    peer = new Peer(); // 隨機 ID
+    peer.on('open', (id) => {
+        setupLocalPlayer(name, id, code);
+        const conn = peer.connect(code);
+        setupConnection(conn);
+    });
+}
+
+function setupLocalPlayer(name, id, code) {
+    playersState[id] = { name: name, ready: false, score: 0 };
+    document.getElementById('displayRoomCode').innerText = code;
 }
 
 function setupConnection(conn) {
@@ -146,14 +159,14 @@ function broadcast(data) {
 }
 
 function pressReady() {
-    if (!peer || !playersState[peer.id]) return;
-    playersState[peer.id].ready = !playersState[peer.id].ready;
+    const myId = peer.id;
+    playersState[myId].ready = !playersState[myId].ready;
     const btn = document.getElementById('readyBtn');
-    btn.innerText = playersState[peer.id].ready ? "取消準備" : "準備開始";
-    btn.style.background = playersState[peer.id].ready ? "#ff4757" : "#00ff88";
+    btn.innerText = playersState[myId].ready ? "取消準備" : "準備開始";
+    btn.style.background = playersState[myId].ready ? "#ff4757" : "#00ff88";
     
     updateLobbyUI();
-    broadcast({ type: 'readyStatus', status: playersState[peer.id].ready });
+    broadcast({ type: 'readyStatus', status: playersState[myId].ready });
     checkAllReady();
 }
 

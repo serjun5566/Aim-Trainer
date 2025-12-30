@@ -145,6 +145,7 @@ input[type="text"]:focus {
     transform: translate(-50%, -50%);
     z-index: 100;
     pointer-events: none;
+    display: none;
 }
 
 #crosshair::after {

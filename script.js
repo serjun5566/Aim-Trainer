@@ -72,42 +72,104 @@ window.addEventListener('mousedown', () => {
     }
 });
 
+// --- 1. 修改：在宣告區下方直接定義產生 ID 的函式 ---
+
+function generateRandomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let result = '';
+    for (let i = 0; i < 5; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+// 2. 新增：初始化填寫代碼的函式
+function initRoomCode() {
+    const roomInput = document.getElementById('roomCodeInput');
+    if (roomInput && !roomInput.value) {
+        roomInput.value = generateRandomCode();
+    }
+}
+
+// 3. 在原本的頁面載入位置執行
+window.addEventListener('load', () => {
+    initRoomCode(); // 進入網頁立刻產生代碼
+});
+
 // --- 3. 多人連線邏輯 (解決連線錯誤) ---
 function joinRoom(role) {
-    const name = document.getElementById('playerNameInput').value.trim();
-    const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
-    if (!name || !code) return alert("請填寫名字與房間代碼");
+    const nameInput = document.getElementById('playerNameInput');
+    const codeInput = document.getElementById('roomCodeInput');
+    const statusDisplay = document.getElementById('connStatus'); // 修正 ID 引用
 
-    document.getElementById('connStatus').innerText = "正在連線伺服器...";
-    
-    // 房主以代碼為 ID，加入者隨機 ID
-    peer = new Peer(role === 'host' ? code : null);
+    const name = nameInput.value.trim();
+    const code = codeInput.value.trim().toUpperCase();
+
+    if (!name || !code) {
+        alert("請輸入名稱與房間代碼！");
+        return;
+    }
+
+    // 更新狀態文字，讓使用者知道點擊有效
+    statusDisplay.innerText = "狀態: 正在建立連線...";
+    statusDisplay.style.color = "#ffcc00";
+
+    if (peer) peer.destroy();
+
+    // 房主以代碼為 ID；加入者由系統分配 ID
+    const peerId = (role === 'host') ? code : null;
+    peer = new Peer(peerId);
 
     peer.on('open', (id) => {
         playersState[id] = { name: name, ready: false, score: 0 };
         document.getElementById('displayRoomCode').innerText = code;
-        document.getElementById('connStatus').innerText = "伺服器就緒";
+        
         if (role === 'host') {
-            startMenu.style.display = 'none';
-            lobbyMenu.style.display = 'block';
-            updateLobbyUI();
+            enterLobby();
+            statusDisplay.innerText = "狀態: 房間已建立 (房主)";
+            statusDisplay.style.color = "#00ff88";
         } else {
-            setupConnection(peer.connect(code));
+            statusDisplay.innerText = "狀態: 正在尋找房間 " + code + "...";
+            const conn = peer.connect(code);
+            setupConnection(conn);
         }
     });
 
     peer.on('connection', setupConnection);
+
     peer.on('error', (err) => {
-        alert("連線錯誤: " + err.type);
-        location.reload();
+        console.error("PeerJS Error:", err.type);
+        statusDisplay.style.color = "#ff4757";
+        if (err.type === 'unavailable-id') {
+            alert('房間代碼已存在，請換一個代碼或嘗試「加入房間」。');
+            statusDisplay.innerText = "狀態: ID 重複";
+        } else if (err.type === 'peer-not-found') {
+            alert('找不到該房間代碼，請確認房主是否已建立房間。');
+            statusDisplay.innerText = "狀態: 找不到房間";
+        } else {
+            alert("連線錯誤: " + err.type);
+            statusDisplay.innerText = "狀態: 出錯";
+        }
+        // 錯誤時回到初始狀態
+        setTimeout(() => location.reload(), 2000);
     });
 }
 
+function enterLobby() {
+    startMenu.style.display = 'none';
+    lobbyMenu.style.display = 'block';
+    updateLobbyUI();
+}
+
 function setupConnection(conn) {
+    // 進入大廳
+    enterLobby();
+
     conn.on('open', () => {
         connections[conn.peer] = conn;
-        startMenu.style.display = 'none';
-        lobbyMenu.style.display = 'block';
+        document.getElementById('connStatus').innerText = "狀態: 已成功連線";
+        document.getElementById('connStatus').style.color = "#00ff88";
+        // 發送初始資訊
         conn.send({ type: 'initInfo', name: playersState[peer.id].name });
     });
 
@@ -115,13 +177,31 @@ function setupConnection(conn) {
         if (data.type === 'initInfo') {
             playersState[conn.peer] = { name: data.name, ready: false, score: 0 };
             updateLobbyUI();
-            if (!data.reply) conn.send({ type: 'initInfo', name: playersState[peer.id].name, reply: true });
+            if (!data.reply) {
+                conn.send({ type: 'initInfo', name: playersState[peer.id].name, reply: true });
+            }
         } else if (data.type === 'readyStatus') {
-            playersState[conn.peer].ready = data.status;
-            updateLobbyUI();
-            checkAllReady();
-        } else if (data.type === 'gameStart') realStartGame();
-        else if (data.type === 'scoreUpdate') { playersState[data.id].score = data.score; updateLeaderboard(); }
+            if (playersState[conn.peer]) {
+                playersState[conn.peer].ready = data.status;
+                updateLobbyUI();
+                checkAllReady();
+            }
+        } else if (data.type === 'gameStart') {
+            realStartGame();
+        } else if (data.type === 'scoreUpdate') {
+            if (playersState[data.id]) {
+                playersState[data.id].score = data.score;
+                updateLeaderboard();
+            }
+        }
+    });
+
+    conn.on('close', () => {
+        delete connections[conn.peer];
+        delete playersState[conn.peer];
+        updateLobbyUI();
+        document.getElementById('connStatus').innerText = "狀態: 對方已離線";
+        document.getElementById('connStatus').style.color = "#ff4757";
     });
 }
 
@@ -152,11 +232,20 @@ function checkAllReady() {
 }
 
 function realStartGame() {
-    gameActive = true; lobbyMenu.style.display = 'none';
+    gameActive = true;
+    lobbyMenu.style.display = 'none';
+    
+    // 新增：遊戲開始時顯示準心
+    document.getElementById('crosshair').style.display = 'block'; 
+
     canvas.requestPointerLock();
     const itv = setInterval(() => {
-        timeLeft--; timerElement.innerText = timeLeft;
-        if (timeLeft <= 0) { clearInterval(itv); location.reload(); }
+        timeLeft--;
+        timerElement.innerText = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(itv);
+            endGame(); // 建議呼叫 endGame 而不是直接 reload
+        }
     }, 1000);
 }
 
@@ -183,3 +272,14 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+function endGame() {
+    gameActive = false;
+    document.exitPointerLock();
+    
+    // 新增：遊戲結束時隱藏準心
+    document.getElementById('crosshair').style.display = 'none'; 
+
+    alert(`遊戲結束！你的得分是: ${score}`);
+    location.reload(); 
+}

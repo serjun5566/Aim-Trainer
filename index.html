@@ -2,36 +2,39 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Aim Trainer - Multiplayer Lobby</title>
+    <title>Aim Trainer 3D - Multiplayer</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div class="ui">
         <div>分數: <span id="score">0</span></div>
-        <div>剩餘時間: <span id="timer">30</span>s</div>
-        <div id="connectionStatus" style="color: #ff4757;">狀態: 離線</div>
+        <div>時間: <span id="timer">30</span>s</div>
+        <div id="connStatus" style="color: #ffcc00;">狀態: 正在載入通訊模組...</div>
     </div>
 
+    <div id="crosshair"></div>
+
     <div id="leaderboard">
-        <h3>即時排名 (TOP 10)</h3>
+        <h3>排名 (TOP 10)</h3>
         <ul id="leaderList"></ul>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
     <div id="startMenu" class="menu-box">
-        <h1>Aim Trainer</h1>
+        <h1>Aim Trainer 3D</h1>
         <div class="menu-controls">
             <div class="input-group">
-                <label>玩家名稱: </label>
-                <input type="text" id="playerNameInput" placeholder="輸入你的名字" maxlength="10">
+                <label>玩家名稱:</label>
+                <input type="text" id="playerNameInput" placeholder="輸入名字" maxlength="10">
             </div>
             <div class="input-group">
-                <label>房間代碼: </label>
-                <input type="text" id="roomCodeInput" placeholder="5位代碼 (房主自訂)" maxlength="5">
+                <label>房間代碼:</label>
+                <input type="text" id="roomCodeInput" placeholder="5位英文或數字" maxlength="5">
             </div>
-            <div style="margin-top: 25px; display: flex; justify-content: center; gap: 15px;">
+            <div style="margin-top: 25px;">
                 <button onclick="joinRoom('host')">建立房間</button>
                 <button onclick="joinRoom('client')">加入房間</button>
             </div>
@@ -39,14 +42,14 @@
     </div>
 
     <div id="lobbyMenu" class="menu-box" style="display: none;">
-        <h2>遊戲大廳 - 房間: <span id="displayRoomCode" style="color:#00ff88"></span></h2>
+        <h2>大廳 - 房間: <span id="displayRoomCode"></span></h2>
         <div id="playerList" class="player-grid"></div>
         <div class="lobby-controls">
-            <label>靈敏度: </label>
-            <input type="range" id="sensRange" min="0.1" max="5" step="0.1" value="1">
-            <span id="sensValue">1.0</span>
+            <label>滑鼠靈敏度:</label>
+            <input type="range" id="sensRange" min="0.0005" max="0.01" step="0.0005" value="0.002">
+            <span id="sensValue">0.002</span>
             <br><br>
-            <button id="readyBtn" onclick="pressReady()">準備遊戲</button>
+            <button id="readyBtn" onclick="pressReady()">準備開始</button>
         </div>
     </div>
 

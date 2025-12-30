@@ -133,3 +133,68 @@ input[type="text"]:focus {
     box-shadow: 0 0 10px #00ff88;
     outline: none;
 }
+
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border: 2px solid white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 100;
+    pointer-events: none;
+}
+
+#crosshair::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2px;
+    height: 2px;
+    background: white;
+    transform: translate(-50%, -50%);
+}
+
+#gameCanvas {
+    width: 100vw;
+    height: 100vh;
+}
+
+body {
+    margin: 0; overflow: hidden;
+    background-color: #000;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: white; user-select: none;
+}
+
+#gameCanvas {
+    display: block; width: 100vw; height: 100vh;
+}
+
+#crosshair {
+    position: absolute; top: 50%; left: 50%;
+    width: 10px; height: 10px;
+    border: 2px solid #00ff88; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 100; pointer-events: none;
+}
+
+/* UI 與選單樣式 */
+.ui { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
+#leaderboard {
+    position: absolute; top: 20px; right: 20px; z-index: 10;
+    background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; border: 1px solid #00ff88;
+}
+.menu-box {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 20; background: rgba(0,0,0,0.95); padding: 30px;
+    border-radius: 15px; border: 2px solid #00ff88; text-align: center; min-width: 350px;
+}
+.player-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+.player-tag { background: #333; padding: 8px; border-radius: 4px; font-size: 14px; }
+.player-tag.ready { background: #00ff88; color: #000; }
+button { padding: 10px 20px; cursor: pointer; background: #00ff88; border: none; font-weight: bold; border-radius: 5px; }
+input[type="text"] { padding: 10px; background: #222; color: #fff; border: 1px solid #00ff88; text-align: center; border-radius: 5px; margin-bottom: 10px; }

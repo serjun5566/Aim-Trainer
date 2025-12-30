@@ -1,5 +1,4 @@
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
 const scoreElement = document.getElementById('score');
 const timerElement = document.getElementById('timer');
 const startMenu = document.getElementById('startMenu');
@@ -8,235 +7,179 @@ const sensRange = document.getElementById('sensRange');
 const sensValue = document.getElementById('sensValue');
 const leaderList = document.getElementById('leaderList');
 
-let score = 0, timeLeft = 30, targets = [], gameActive = false;
-let sensitivity = 1.0, crosshairX = 0, crosshairY = 0;
+let score = 0, timeLeft = 30, gameActive = false;
+let sensitivity = 0.002, yaw = 0, pitch = 0;
+let peer = null, connections = {}, playersState = {};
 
-let peer = null;
-let connections = {}; 
-let playersState = {}; // 格式: {peerId: {name: string, ready: bool, score: int}}
+// --- 1. Three.js 3D 初始化 ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0a);
 
-// --- 1. 多人連線與大廳邏輯 ---
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
 
+// 燈光與環境
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 10, 7.5);
+scene.add(dirLight);
+
+// 輔助地板
+const grid = new THREE.GridHelper(100, 50, 0x00ff88, 0x222222);
+grid.position.y = -2;
+scene.add(grid);
+
+// 目標球體管理
+let targets = [];
+const targetGeo = new THREE.SphereGeometry(0.6, 32, 32);
+
+function spawnTarget() {
+    const mat = new THREE.MeshPhongMaterial({ color: 0x00d4ff, emissive: 0x002233 });
+    const mesh = new THREE.Mesh(targetGeo, mat);
+    mesh.position.set((Math.random()-0.5)*20, Math.random()*5, -Math.random()*15 - 5);
+    scene.add(mesh);
+    targets.push(mesh);
+}
+
+// --- 2. 視角與射擊控制 ---
+document.addEventListener('mousemove', (e) => {
+    if (gameActive && document.pointerLockElement === canvas) {
+        yaw -= e.movementX * sensitivity;
+        pitch -= e.movementY * sensitivity;
+        pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+        camera.rotation.set(pitch, yaw, 0, 'YXZ');
+    }
+});
+
+const raycaster = new THREE.Raycaster();
+window.addEventListener('mousedown', () => {
+    if (!gameActive) return;
+    if (document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
+
+    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+    const hits = raycaster.intersectObjects(targets);
+
+    if (hits.length > 0) {
+        const obj = hits[0].object;
+        scene.remove(obj);
+        targets = targets.filter(t => t !== obj);
+        score += 100;
+        scoreElement.innerText = score;
+        playersState[peer.id].score = score;
+        updateLeaderboard();
+        broadcast({ type: 'scoreUpdate', id: peer.id, score: score });
+    }
+});
+
+// --- 3. 多人連線邏輯 (解決連線錯誤) ---
 function joinRoom(role) {
     const name = document.getElementById('playerNameInput').value.trim();
     const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+    if (!name || !code) return alert("請填寫名字與房間代碼");
 
-    if (!name || !code) {
-        alert("請輸入名稱與房間代碼！");
-        return;
-    }
-
-    if (peer) peer.destroy();
-
-    // 房主直接使用代碼作為 ID；加入者則讓系統生成 ID
-    const peerId = (role === 'host') ? code : null;
-    peer = new Peer(peerId);
+    document.getElementById('connStatus').innerText = "正在連線伺服器...";
+    
+    // 房主以代碼為 ID，加入者隨機 ID
+    peer = new Peer(role === 'host' ? code : null);
 
     peer.on('open', (id) => {
-        // 記錄自己的狀態
         playersState[id] = { name: name, ready: false, score: 0 };
         document.getElementById('displayRoomCode').innerText = code;
-        
+        document.getElementById('connStatus').innerText = "伺服器就緒";
         if (role === 'host') {
-            enterLobby();
-            document.getElementById('connectionStatus').innerText = "狀態: 房間已建立";
-            document.getElementById('connectionStatus').style.color = "#00ff88";
+            startMenu.style.display = 'none';
+            lobbyMenu.style.display = 'block';
+            updateLobbyUI();
         } else {
-            const conn = peer.connect(code);
-            setupConnection(conn);
+            setupConnection(peer.connect(code));
         }
     });
 
-    peer.on('connection', (conn) => {
-        setupConnection(conn);
-    });
-
+    peer.on('connection', setupConnection);
     peer.on('error', (err) => {
-        if (err.type === 'unavailable-id') alert('代碼已被佔用，請嘗試其他房間碼！');
-        else if (err.type === 'peer-not-found') alert('找不到該房間，請確認代碼是否正確。');
-        else console.error(err);
+        alert("連線錯誤: " + err.type);
+        location.reload();
     });
-}
-
-function enterLobby() {
-    startMenu.style.display = 'none';
-    lobbyMenu.style.display = 'block';
-    updateLobbyUI();
 }
 
 function setupConnection(conn) {
-    enterLobby();
-    
     conn.on('open', () => {
         connections[conn.peer] = conn;
-        // 連線成功後，主動發送自己的名字給對方
-        conn.send({ 
-            type: 'initInfo', 
-            name: playersState[peer.id].name 
-        });
+        startMenu.style.display = 'none';
+        lobbyMenu.style.display = 'block';
+        conn.send({ type: 'initInfo', name: playersState[peer.id].name });
     });
 
     conn.on('data', (data) => {
         if (data.type === 'initInfo') {
             playersState[conn.peer] = { name: data.name, ready: false, score: 0 };
             updateLobbyUI();
-            // 收到對方名字後，回傳自己的名字（確保雙方都有數據）
-            if (!data.reply) {
-                conn.send({ type: 'initInfo', name: playersState[peer.id].name, reply: true });
-            }
+            if (!data.reply) conn.send({ type: 'initInfo', name: playersState[peer.id].name, reply: true });
         } else if (data.type === 'readyStatus') {
-            if (playersState[conn.peer]) playersState[conn.peer].ready = data.status;
+            playersState[conn.peer].ready = data.status;
             updateLobbyUI();
             checkAllReady();
-        } else if (data.type === 'gameStart') {
-            realStartGame();
-        } else if (data.type === 'scoreUpdate') {
-            if (playersState[data.id]) playersState[data.id].score = data.score;
-            updateLeaderboard();
-        }
-    });
-
-    conn.on('close', () => {
-        delete connections[conn.peer];
-        delete playersState[conn.peer];
-        updateLobbyUI();
+        } else if (data.type === 'gameStart') realStartGame();
+        else if (data.type === 'scoreUpdate') { playersState[data.id].score = data.score; updateLeaderboard(); }
     });
 }
 
 function broadcast(data) {
-    Object.values(connections).forEach(c => { if(c.open) c.send(data); });
+    Object.values(connections).forEach(c => c.send(data));
 }
 
-// --- 2. 大廳 UI 與準備機制 ---
-
 function pressReady() {
-    const myId = peer.id;
-    playersState[myId].ready = !playersState[myId].ready;
-    document.getElementById('readyBtn').innerText = playersState[myId].ready ? "取消準備" : "準備遊戲";
-    
+    playersState[peer.id].ready = !playersState[peer.id].ready;
+    document.getElementById('readyBtn').innerText = playersState[peer.id].ready ? "取消準備" : "準備開始";
     updateLobbyUI();
-    broadcast({ type: 'readyStatus', status: playersState[myId].ready });
+    broadcast({ type: 'readyStatus', status: playersState[peer.id].ready });
     checkAllReady();
 }
 
 function updateLobbyUI() {
     const list = document.getElementById('playerList');
-    list.innerHTML = '';
-    Object.entries(playersState).forEach(([id, state]) => {
-        const div = document.createElement('div');
-        div.className = `player-tag ${state.ready ? 'ready' : ''}`;
-        div.innerText = `${state.name}${id === peer.id ? ' (我)' : ''}: ${state.ready ? '已準備' : '未準備'}`;
-        list.appendChild(div);
-    });
+    list.innerHTML = Object.entries(playersState).map(([id, s]) => 
+        `<div class="player-tag ${s.ready ? 'ready' : ''}">${s.name}${id === peer.id ? ' (我)' : ''}</div>`
+    ).join('');
 }
 
 function checkAllReady() {
-    const players = Object.values(playersState);
-    const allReady = players.every(p => p.ready);
-    // 所有人準備好且房間內有玩家時同步開始
-    if (allReady && players.length >= 1) {
+    if (Object.values(playersState).every(p => p.ready)) {
         broadcast({ type: 'gameStart' });
         realStartGame();
     }
 }
 
+function realStartGame() {
+    gameActive = true; lobbyMenu.style.display = 'none';
+    canvas.requestPointerLock();
+    const itv = setInterval(() => {
+        timeLeft--; timerElement.innerText = timeLeft;
+        if (timeLeft <= 0) { clearInterval(itv); location.reload(); }
+    }, 1000);
+}
+
 function updateLeaderboard() {
-    const sorted = Object.entries(playersState)
-        .sort((a,b)=>b[1].score - a[1].score)
-        .slice(0, 10);
+    const sorted = Object.entries(playersState).sort((a,b)=>b[1].score-a[1].score);
     leaderList.innerHTML = sorted.map(([id, s]) => `<li>${s.name}: ${s.score}</li>`).join('');
 }
 
-// --- 3. 遊戲核心邏輯 ---
-
-class Target {
-    constructor() {
-        this.radius = 25;
-        this.x = Math.random() * (canvas.width - 100) + 50;
-        this.y = Math.random() * (canvas.height - 100) + 50;
-        const speed = 4;
-        const angle = Math.random() * Math.PI * 2;
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
-    }
-    update() {
-        this.x += this.vx; this.y += this.vy;
-        if (this.x + this.radius > canvas.width || this.x - this.radius < 0) this.vx *= -1;
-        if (this.y + this.radius > canvas.height || this.y - this.radius < 0) this.vy *= -1;
-    }
-    draw() {
-        ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "#00d4ff"; ctx.fill(); ctx.closePath();
-    }
+// 遊戲渲染循環
+function render() {
+    requestAnimationFrame(render);
+    if (gameActive && targets.length < 5) spawnTarget();
+    renderer.render(scene, camera);
 }
+render();
 
-function realStartGame() {
-    if (gameActive) return;
-    canvas.requestPointerLock();
-    score = 0; timeLeft = 30; targets = []; gameActive = true;
-    lobbyMenu.style.display = 'none';
-    crosshairX = canvas.width / 2; crosshairY = canvas.height / 2;
-
-    const timerInterval = setInterval(() => {
-        if (!gameActive) { clearInterval(timerInterval); return; }
-        timeLeft--;
-        timerElement.innerText = timeLeft;
-        if (timeLeft <= 0) endGame();
-    }, 1000);
-    animate();
-}
-
-function animate() {
-    if (!gameActive) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (targets.length < 5) targets.push(new Target());
-    targets.forEach(t => { t.update(); t.draw(); });
-    
-    if (document.pointerLockElement === canvas) {
-        ctx.strokeStyle = "white"; ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(crosshairX-10, crosshairY); ctx.lineTo(crosshairX+10, crosshairY);
-        ctx.moveTo(crosshairX, crosshairY-10); ctx.lineTo(crosshairX, crosshairY+10);
-        ctx.stroke();
-    }
-    requestAnimationFrame(animate);
-}
-
-canvas.addEventListener('mousedown', () => {
-    if (!gameActive) return;
-    if (document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
-    targets.forEach((t, i) => {
-        const d = Math.sqrt((crosshairX - t.x)**2 + (crosshairY - t.y)**2);
-        if (d < t.radius) {
-            targets.splice(i, 1);
-            score += 100; scoreElement.innerText = score;
-            playersState[peer.id].score = score;
-            updateLeaderboard();
-            broadcast({ type: 'scoreUpdate', id: peer.id, score: score });
-        }
-    });
-});
-
-window.addEventListener('mousemove', (e) => {
-    if (gameActive && document.pointerLockElement === canvas) {
-        crosshairX += e.movementX * sensitivity;
-        crosshairY += e.movementY * sensitivity;
-        crosshairX = Math.max(0, Math.min(canvas.width, crosshairX));
-        crosshairY = Math.max(0, Math.min(canvas.height, crosshairY));
-    }
-});
-
+// 靈敏度與縮放修正
 sensRange.addEventListener('input', (e) => {
     sensitivity = parseFloat(e.target.value);
-    sensValue.innerText = sensitivity.toFixed(1);
+    sensValue.innerText = sensitivity;
 });
-
-function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-window.addEventListener('resize', resize);
-resize();
-
-function endGame() {
-    gameActive = false; document.exitPointerLock();
-    alert(`遊戲結束！你的得分是: ${score}`);
-    location.reload();
-}
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});

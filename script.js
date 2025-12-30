@@ -11,26 +11,22 @@ let score = 0, timeLeft = 30, gameActive = false;
 let sensitivity = 0.002, yaw = 0, pitch = 0;
 let peer = null, connections = {}, playersState = {};
 
-// --- 1. Three.js 3D 初始化 ---
+// --- 3D 場景初始化 ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0a);
-
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// 燈光與環境
 scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(5, 10, 7.5);
 scene.add(dirLight);
 
-// 輔助地板
 const grid = new THREE.GridHelper(100, 50, 0x00ff88, 0x222222);
 grid.position.y = -2;
 scene.add(grid);
 
-// 目標球體管理
 let targets = [];
 const targetGeo = new THREE.SphereGeometry(0.6, 32, 32);
 
@@ -42,7 +38,7 @@ function spawnTarget() {
     targets.push(mesh);
 }
 
-// --- 2. 視角與射擊控制 ---
+// --- 控制與射擊 ---
 document.addEventListener('mousemove', (e) => {
     if (gameActive && document.pointerLockElement === canvas) {
         yaw -= e.movementX * sensitivity;
@@ -56,10 +52,8 @@ const raycaster = new THREE.Raycaster();
 window.addEventListener('mousedown', () => {
     if (!gameActive) return;
     if (document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
-
     raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
     const hits = raycaster.intersectObjects(targets);
-
     if (hits.length > 0) {
         const obj = hits[0].object;
         scene.remove(obj);
@@ -72,104 +66,56 @@ window.addEventListener('mousedown', () => {
     }
 });
 
-// --- 1. 修改：在宣告區下方直接定義產生 ID 的函式 ---
-
+// --- 連線邏輯優化 ---
 function generateRandomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let result = '';
-    for (let i = 0; i < 5; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
+    let res = '';
+    for (let i = 0; i < 5; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+    return res;
 }
 
-// 2. 新增：初始化填寫代碼的函式
 function initRoomCode() {
     const roomInput = document.getElementById('roomCodeInput');
-    if (roomInput && !roomInput.value) {
-        roomInput.value = generateRandomCode();
-    }
+    if (roomInput && !roomInput.value) roomInput.value = generateRandomCode();
 }
+window.addEventListener('load', initRoomCode);
 
-// 3. 在原本的頁面載入位置執行
-window.addEventListener('load', () => {
-    initRoomCode(); // 進入網頁立刻產生代碼
-});
-
-// --- 3. 多人連線邏輯 (解決連線錯誤) ---
 function joinRoom(role) {
-    const nameInput = document.getElementById('playerNameInput');
-    const codeInput = document.getElementById('roomCodeInput');
-    const statusDisplay = document.getElementById('connStatus'); // 修正 ID 引用
+    const name = document.getElementById('playerNameInput').value.trim();
+    const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+    if (!name || !code) return alert("請輸入名稱與代碼");
 
-    const name = nameInput.value.trim();
-    const code = codeInput.value.trim().toUpperCase();
-
-    if (!name || !code) {
-        alert("請輸入名稱與房間代碼！");
-        return;
-    }
-
-    // 更新狀態文字，讓使用者知道點擊有效
-    statusDisplay.innerText = "狀態: 正在建立連線...";
-    statusDisplay.style.color = "#ffcc00";
-
+    const statusDisplay = document.getElementById('connStatus');
+    statusDisplay.innerText = "狀態: 同步中...";
+    
     if (peer) peer.destroy();
-
-    // 房主以代碼為 ID；加入者由系統分配 ID
-    const peerId = (role === 'host') ? code : null;
-    peer = new Peer(peerId);
+    peer = new Peer(role === 'host' ? code : null, { debug: 1 });
 
     peer.on('open', (id) => {
         playersState[id] = { name: name, ready: false, score: 0 };
         document.getElementById('displayRoomCode').innerText = code;
-        
         if (role === 'host') {
             enterLobby();
-            statusDisplay.innerText = "狀態: 房間已建立 (房主)";
-            statusDisplay.style.color = "#00ff88";
+            statusDisplay.innerText = "狀態: 房間已建立";
         } else {
-            statusDisplay.innerText = "狀態: 正在尋找房間 " + code + "...";
+            statusDisplay.innerText = "狀態: 正在連線房主...";
             const conn = peer.connect(code);
             setupConnection(conn);
         }
     });
 
     peer.on('connection', setupConnection);
-
     peer.on('error', (err) => {
-        console.error("PeerJS Error:", err.type);
-        statusDisplay.style.color = "#ff4757";
-        if (err.type === 'unavailable-id') {
-            alert('房間代碼已存在，請換一個代碼或嘗試「加入房間」。');
-            statusDisplay.innerText = "狀態: ID 重複";
-        } else if (err.type === 'peer-not-found') {
-            alert('找不到該房間代碼，請確認房主是否已建立房間。');
-            statusDisplay.innerText = "狀態: 找不到房間";
-        } else {
-            alert("連線錯誤: " + err.type);
-            statusDisplay.innerText = "狀態: 出錯";
-        }
-        // 錯誤時回到初始狀態
-        setTimeout(() => location.reload(), 2000);
+        alert("連線失敗: " + err.type);
+        statusDisplay.innerText = "狀態: 錯誤";
     });
 }
 
-function enterLobby() {
-    startMenu.style.display = 'none';
-    lobbyMenu.style.display = 'block';
-    updateLobbyUI();
-}
-
 function setupConnection(conn) {
-    // 進入大廳
-    enterLobby();
-
     conn.on('open', () => {
         connections[conn.peer] = conn;
-        document.getElementById('connStatus').innerText = "狀態: 已成功連線";
-        document.getElementById('connStatus').style.color = "#00ff88";
-        // 發送初始資訊
+        enterLobby();
+        document.getElementById('connStatus').innerText = "狀態: 已連線";
         conn.send({ type: 'initInfo', name: playersState[peer.id].name });
     });
 
@@ -177,9 +123,7 @@ function setupConnection(conn) {
         if (data.type === 'initInfo') {
             playersState[conn.peer] = { name: data.name, ready: false, score: 0 };
             updateLobbyUI();
-            if (!data.reply) {
-                conn.send({ type: 'initInfo', name: playersState[peer.id].name, reply: true });
-            }
+            if (!data.reply) conn.send({ type: 'initInfo', name: playersState[peer.id].name, reply: true });
         } else if (data.type === 'readyStatus') {
             if (playersState[conn.peer]) {
                 playersState[conn.peer].ready = data.status;
@@ -195,23 +139,19 @@ function setupConnection(conn) {
             }
         }
     });
-
-    conn.on('close', () => {
-        delete connections[conn.peer];
-        delete playersState[conn.peer];
-        updateLobbyUI();
-        document.getElementById('connStatus').innerText = "狀態: 對方已離線";
-        document.getElementById('connStatus').style.color = "#ff4757";
-    });
 }
 
 function broadcast(data) {
-    Object.values(connections).forEach(c => c.send(data));
+    Object.values(connections).forEach(c => { if (c.open) c.send(data); });
 }
 
 function pressReady() {
+    if (!peer || !playersState[peer.id]) return;
     playersState[peer.id].ready = !playersState[peer.id].ready;
-    document.getElementById('readyBtn').innerText = playersState[peer.id].ready ? "取消準備" : "準備開始";
+    const btn = document.getElementById('readyBtn');
+    btn.innerText = playersState[peer.id].ready ? "取消準備" : "準備開始";
+    btn.style.background = playersState[peer.id].ready ? "#ff4757" : "#00ff88";
+    
     updateLobbyUI();
     broadcast({ type: 'readyStatus', status: playersState[peer.id].ready });
     checkAllReady();
@@ -225,28 +165,38 @@ function updateLobbyUI() {
 }
 
 function checkAllReady() {
-    if (Object.values(playersState).every(p => p.ready)) {
+    const players = Object.values(playersState);
+    if (players.length >= 1 && players.every(p => p.ready)) {
         broadcast({ type: 'gameStart' });
-        realStartGame();
+        setTimeout(realStartGame, 500);
     }
 }
 
 function realStartGame() {
+    if (gameActive) return;
     gameActive = true;
     lobbyMenu.style.display = 'none';
-    
-    // 新增：遊戲開始時顯示準心
-    document.getElementById('crosshair').style.display = 'block'; 
-
+    document.getElementById('crosshair').style.display = 'block';
     canvas.requestPointerLock();
     const itv = setInterval(() => {
         timeLeft--;
         timerElement.innerText = timeLeft;
-        if (timeLeft <= 0) {
-            clearInterval(itv);
-            endGame(); // 建議呼叫 endGame 而不是直接 reload
-        }
+        if (timeLeft <= 0) { clearInterval(itv); endGame(); }
     }, 1000);
+}
+
+function endGame() {
+    gameActive = false;
+    document.exitPointerLock();
+    document.getElementById('crosshair').style.display = 'none';
+    alert(`遊戲結束！得分: ${score}`);
+    location.reload();
+}
+
+function enterLobby() {
+    startMenu.style.display = 'none';
+    lobbyMenu.style.display = 'block';
+    updateLobbyUI();
 }
 
 function updateLeaderboard() {
@@ -254,7 +204,6 @@ function updateLeaderboard() {
     leaderList.innerHTML = sorted.map(([id, s]) => `<li>${s.name}: ${s.score}</li>`).join('');
 }
 
-// 遊戲渲染循環
 function render() {
     requestAnimationFrame(render);
     if (gameActive && targets.length < 5) spawnTarget();
@@ -262,24 +211,12 @@ function render() {
 }
 render();
 
-// 靈敏度與縮放修正
 sensRange.addEventListener('input', (e) => {
     sensitivity = parseFloat(e.target.value);
     sensValue.innerText = sensitivity;
 });
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
 
-function endGame() {
-    gameActive = false;
-    document.exitPointerLock();
-    
-    // 新增：遊戲結束時隱藏準心
-    document.getElementById('crosshair').style.display = 'none'; 
-
-    alert(`遊戲結束！你的得分是: ${score}`);
-    location.reload(); 
+function leaveLobby() {
+    if (peer) peer.destroy();
+    location.reload();
 }

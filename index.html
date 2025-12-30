@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Aim Trainer 3D - Multiplayer</title>
+    <title>Aim Trainer 3D - Pro Multiplayer</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -11,7 +11,7 @@
     <div class="ui">
         <div>分數: <span id="score">0</span></div>
         <div>時間: <span id="timer">30</span>s</div>
-        <div id="connStatus" style="color: #ffcc00;">狀態: 等待輸入...</div>
+        <div id="connStatus" style="color: #ffcc00;">狀態: 離線</div>
     </div>
     <div id="crosshair"></div>
 
@@ -31,7 +31,7 @@
             </div>
             <div class="input-group">
                 <label>房間代碼: </label>
-                <input type="text" id="roomCodeInput" placeholder="5位代碼 (房主自訂)" maxlength="5">
+                <input type="text" id="roomCodeInput" placeholder="5位代碼" maxlength="5">
             </div>
             <div style="margin-top: 25px;">
                 <button onclick="joinRoom('host')">建立房間</button>
@@ -49,6 +49,7 @@
             <span id="sensValue">0.002</span>
             <br><br>
             <button id="readyBtn" onclick="pressReady()">準備開始</button>
+            <button id="backBtn" onclick="leaveLobby()" style="background: #ff4757; margin-top: 10px;">返回選單</button>
         </div>
     </div>
 

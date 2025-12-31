@@ -1,201 +1,137 @@
+/* 1. 基礎設定 */
 body {
-    margin: 0;
-    overflow: hidden;
-    background-color: #1a1a1a;
-    font-family: 'Segoe UI', Arial, sans-serif;
-    color: white;
-    user-select: none;
+    margin: 0; padding: 0; overflow: hidden;
+    background-color: #000; font-family: 'Segoe UI', Arial, sans-serif;
+    color: white; user-select: none; width: 100vw; height: 100vh;
 }
 
 #gameCanvas {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1;
+    display: block; position: absolute; top: 0; left: 0;
+    width: 100% !important; height: 100% !important; z-index: 1;
+}
+
+#crosshair {
+    position: absolute; top: 50%; left: 50%; width: 12px; height: 12px;
+    border: 2px solid #00ff88; border-radius: 50%;
+    transform: translate(-50%, -50%); z-index: 100;
+    pointer-events: none; display: none;
+}
+
+#crosshair::after {
+    content: ''; position: absolute; top: 50%; left: 50%; width: 2px; height: 2px;
+    background: #00ff88; transform: translate(-50%, -50%);
 }
 
 .ui {
+    position: absolute; top: 20px; left: 20px; z-index: 10;
+    font-size: 18px; pointer-events: none; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+}
+
+/* 修正齒輪圖示在左上角的位置 */
+#settingsIcon {
     position: absolute;
     top: 20px;
-    left: 20px;
-    z-index: 10;
+    left: 140px; /* 根據你的分數文字寬度微調 */
+    z-index: 100;
+    cursor: pointer;
     font-size: 20px;
-    pointer-events: none;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    opacity: 0.6;
+    transition: 0.3s;
+}
+
+#settingsIcon:hover {
+    opacity: 1;
+    transform: rotate(90deg);
 }
 
 #leaderboard {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    z-index: 10;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 15px;
-    border-radius: 10px;
-    border: 1px solid #00ff88;
-    min-width: 180px;
-}
-
-#leaderList {
-    list-style: none;
-    padding: 0;
-    margin: 10px 0 0 0;
-    color: #00ff88;
-    font-family: monospace;
+    position: absolute; top: 20px; right: 20px; z-index: 10;
+    background: rgba(0, 0, 0, 0.85); padding: 15px; border-radius: 10px;
+    border: 1px solid #00ff88; min-width: 200px;
 }
 
 .menu-box {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 20;
-    background: rgba(0, 0, 0, 0.95);
-    padding: 30px;
-    border-radius: 20px;
-    border: 2px solid #00ff88;
-    text-align: center;
-    min-width: 400px;
-    box-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 20; background: rgba(10, 10, 10, 0.95); padding: 40px;
+    border-radius: 20px; border: 2px solid #00ff88; text-align: center;
+    min-width: 380px; box-shadow: 0 0 40px rgba(0, 255, 136, 0.3);
 }
 
 .player-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    margin: 20px 0;
-    max-height: 250px; /* 增加高度 */
-    overflow-y: auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin: 20px 0; max-height: 200px; overflow-y: auto;
 }
+
 .player-tag {
-    background: #333;
-    padding: 10px;
-    border-radius: 5px;
-    font-size: 14px;
-    border-left: 5px solid #ff4757;
+    background: #222; padding: 10px; border-radius: 6px; font-size: 14px;
+    border-left: 4px solid #ff4757;
 }
 
 .player-tag.ready {
-    border-left: 5px solid #00ff88;
-    background: #1a3a2a;
+    border-left: 4px solid #00ff88; background: #1a3a2a; color: #00ff88;
 }
 
 button {
-    padding: 10px 20px;
-    cursor: pointer;
-    background: #00ff88;
-    border: none;
-    border-radius: 5px;
-    font-weight: bold;
+    padding: 12px 24px; cursor: pointer; background: #00ff88; color: #000;
+    border: none; border-radius: 6px; font-weight: bold; font-size: 16px;
     transition: 0.2s;
 }
 
 button:hover {
-    background: #00cc6e;
-    transform: scale(1.05);
+    background: #00cc6e; transform: translateY(-2px);
+}
+
+input[type="text"], input[type="range"] {
+    margin-bottom: 15px;
 }
 
 input[type="text"] {
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px solid #444;
-    background: #222;
-    color: white;
-    text-align: center;
-}
-input-group {
-    margin: 15px 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    padding: 12px; width: 240px; border-radius: 6px;
+    border: 1px solid #00ff88; background: #111; color: #fff; text-align: center;
 }
 
 .input-group label {
-    margin-bottom: 8px;
-    font-size: 16px;
+    display: block; margin-bottom: 10px; font-size: 14px; color: #00ff88;
+}
+
+#exitPracticeBtn {
+    background: #ff4757; border: 2px solid white; box-shadow: 0 0 20px rgba(255, 71, 87, 0.6);
+}
+
+/* 建議統一按鈕風格 */
+#applySensBtn, #practiceBtn {
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid #00ff88;
+    background: transparent;
+    color: #00ff88;
+    cursor: pointer;
+    margin-left: 5px;
+}
+
+.small-btn {
+    padding: 0 12px !important;
+    font-size: 13px !important;
+    min-width: 95px;      /* 確保能放下 "套用靈敏度" */
+    height: 32px;         /* 固定高度 */
+    line-height: 30px;    /* 扣除邊框後置中文字 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #00ff88;
+    background: transparent;
+    color: #00ff88;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    vertical-align: middle;
+    box-sizing: border-box; /* 確保 padding 不會撐大按鈕 */
+    margin-left: 5px;
+    border-radius: 4px;
+}
+
+/* 移除 script.js 可能產生的衝突 */
+#applySensBtn:hover, #practiceBtn:hover {
+    background: rgba(0, 255, 136, 0.2);
     color: #00ff88;
 }
-
-input[type="text"] {
-    padding: 10px;
-    width: 220px;
-    border-radius: 5px;
-    border: 1px solid #00ff88;
-    background: #111;
-    color: #fff;
-    font-size: 16px;
-    text-align: center;
-    transition: 0.3s;
-}
-
-input[type="text"]:focus {
-    box-shadow: 0 0 10px #00ff88;
-    outline: none;
-}
-
-#crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    border: 2px solid white;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 100;
-    pointer-events: none;
-    display: none;
-}
-
-#crosshair::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 2px;
-    height: 2px;
-    background: white;
-    transform: translate(-50%, -50%);
-}
-
-#gameCanvas {
-    width: 100vw;
-    height: 100vh;
-}
-
-body {
-    margin: 0; overflow: hidden;
-    background-color: #000;
-    font-family: 'Segoe UI', Arial, sans-serif;
-    color: white; user-select: none;
-}
-
-#gameCanvas {
-    display: block; width: 100vw; height: 100vh;
-}
-
-#crosshair {
-    position: absolute; top: 50%; left: 50%;
-    width: 10px; height: 10px;
-    border: 2px solid #00ff88; border-radius: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 100; pointer-events: none;
-}
-
-/* UI 與選單樣式 */
-.ui { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; }
-#leaderboard {
-    position: absolute; top: 20px; right: 20px; z-index: 10;
-    background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; border: 1px solid #00ff88;
-}
-.menu-box {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    z-index: 20; background: rgba(0,0,0,0.95); padding: 30px;
-    border-radius: 15px; border: 2px solid #00ff88; text-align: center; min-width: 350px;
-}
-.player-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
-.player-tag { background: #333; padding: 8px; border-radius: 4px; font-size: 14px; }
-.player-tag.ready { background: #00ff88; color: #000; }
-button { padding: 10px 20px; cursor: pointer; background: #00ff88; border: none; font-weight: bold; border-radius: 5px; }
-input[type="text"] { padding: 10px; background: #222; color: #fff; border: 1px solid #00ff88; text-align: center; border-radius: 5px; margin-bottom: 10px; }
